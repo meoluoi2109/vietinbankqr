@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VietinBank QR Generator – Mobile First (v3.4)</title>
+  <style>
+    :root{
+      --bg1:#e9f6ff; --bg2:#d4edff; --brand:#0b7cc2; --ink:#0a2a44; --muted:#6b7280; --panel:#ffffff;
+      --radius:16px; --radius-sm:10px; --shadow:0 10px 36px rgba(0,0,0,.12);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; padding:12px; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif; color:#0a2a44;
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));
+    }
+
+    .app{display:grid; gap:12px; max-width:960px; margin:0 auto}
+    .card-wrap{display:flex; justify-content:center}
+
+    .card{
+      position:relative; width:min(92vw, 420px); aspect-ratio:2/3;
+      border-radius:var(--radius); overflow:hidden; background:#bfe8ff; box-shadow:0 20px 60px rgba(13,63,97,.18);
+      touch-action:none;
+    }
+    .bg{position:absolute; inset:0; background-size:cover; background-position:center}
+
+    .qr-box,.title,.account,.alias,.footer{position:absolute; user-select:none; -webkit-user-select:none; cursor:grab}
+    .qr-box:hover,.title:hover,.account:hover,.alias:hover,.footer:hover{outline:2px dashed rgba(11,124,194,.45); outline-offset:4px}
+    .dragging{outline:2px solid var(--brand); cursor:grabbing !important; z-index:10}
+
+    .qr-box{left:50%; top:32%; translate:-50% -50%; width:min(64vw, 300px); height:min(64vw, 300px); background:#fff; padding:12px; border-radius:14px; box-shadow:0 12px 28px rgba(0,0,0,.15); display:flex; align-items:center; justify-content:center}
+    .qr-box img{max-width:100%; max-height:100%; display:block; border-radius:6px}
+
+    .title{left:50%; top:68%; translate:-50% 0; text-align:center; color:#134a7c; text-transform:uppercase; font-weight:800; letter-spacing:.04em; line-height:1.15; padding:0 12px; font-size:clamp(18px, 4.5vw, 28px)}
+    .account{left:50%; top:77%; translate:-50% 0; text-align:center; color:#134a7c; font-weight:800; font-size:clamp(16px, 4vw, 24px)}
+    .alias{left:50%; top:83%; translate:-50% 0; text-align:center; color:#134a7c; font-weight:700; font-size:clamp(12px, 3.8vw, 20px)}
+    .footer{left:50%; bottom:4%; translate:-50% 0; text-align:center; color:#355a78; font-size:clamp(11px, 3.2vw, 16px); line-height:1.35; font-weight:700}
+    .footer div{margin:2px 0}
+
+    .panel{background:var(--panel); border-radius:var(--radius); box-shadow:var(--shadow); padding:14px}
+    .panel h2{font-size:16px; margin:0 0 8px; color:var(--ink)}
+    .group{background:#f9fafb; border-radius:12px; padding:10px; margin:8px 0}
+    .group-title{font-size:12px; color:#374151; font-weight:700; margin-bottom:8px; text-transform:uppercase; letter-spacing:.04em}
+    .field{margin:8px 0}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+    label{display:block; font-size:12px; color:#6b7280; margin:0 0 4px}
+    input[type="text"], input[type="number"], textarea{width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:14px; font-family:inherit}
+    input:focus, textarea:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(11,124,194,.12)}
+
+    .check-inline{display:flex; gap:8px; overflow-x:auto; -webkit-overflow-scrolling:touch}
+    .check-inline::-webkit-scrollbar{height:6px}
+    .check-inline::-webkit-scrollbar-thumb{background:#cfe6f8; border-radius:999px}
+    .chip{display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; white-space:nowrap}
+    .chip input{width:18px;height:18px}
+
+    .btn{display:inline-flex; justify-content:center; align-items:center; gap:8px; padding:12px 14px; border:0; border-radius:12px; background:var(--brand); color:#fff; font-weight:700; width:100%; cursor:pointer}
+    .btn:active{transform:translateY(1px)}
+    .btn.muted{background:#6b7280}
+    .btn.secondary{background:#0f9b7b}
+
+    details{margin:6px 0}
+    summary{cursor:pointer; font-size:13px; color:#374151; padding:8px; border-radius:8px}
+    summary:hover{background:#f3f4f6}
+
+    .gallery{display:grid; grid-template-columns:repeat(5,1fr); gap:6px; max-height:160px; overflow:auto}
+    .g-item{aspect-ratio:1; border-radius:8px; overflow:hidden; border:2px solid transparent; position:relative}
+    .g-item img{width:100%; height:100%; object-fit:cover}
+    .g-item.selected{border-color:var(--brand)}
+    .g-del{position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; border:0; background:rgba(220,38,38,.95); color:#fff; font-weight:800; cursor:pointer}
+
+    .hint{font-size:12px; color:#6b7280}
+
+    .sticky-actions{position:sticky; bottom:0; background:linear-gradient(180deg, rgba(255,255,255,0) 0%, #ffffff 20%); padding-top:8px}
+
+    @media (min-width: 900px){
+      body{padding:16px}
+      .app{grid-template-columns:min(52vw, 560px) 1fr; align-items:start}
+      .card{width:min(52vw, 560px)}
+    }
+
+    @media (prefers-reduced-motion: reduce){
+      .dragging{outline-offset:0}
+    }
+  </style>
+</head>
+<body>
+  <script>
+    window.AUTO_LOAD = {
+      mode: 'github_auto',
+      owner: '',
+      repo: '',
+      branch: '',
+      dir: 'source',
+      manifest: 'source/images.json'
+    };
+  </script>
+
+  <div class="app">
+    <div class="card-wrap">
+      <div class="card" id="card">
+        <div class="bg" id="bg"></div>
+        <div class="qr-box" id="qrBox"><img id="qr" src="" alt="QR" crossorigin="anonymous" /></div>
+        <div class="title" id="title"><div id="titleText">VIETINBANK NAM SÀI GÒN</div></div>
+        <div class="account" id="accountLine"><span id="accountLabel"></span><span id="accountVal">100868576472</span></div>
+        <div class="alias" id="aliasLine" style="display:none"><span id="aliasLabel"></span><span id="aliasVal">ThoLC</span></div>
+        <div class="footer" id="footer">
+          <div id="f1">VietinBank - CN Nam Sài Gòn</div>
+          <div id="f2">Phòng Dịch vụ Khách Hàng</div>
+          <div id="f3">23 Nguyễn Hữu Thọ, P. Tân Hưng, TP HCM</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Tùy chỉnh</h2>
+
+      <div class="group">
+        <div class="group-title">Căn giữa theo trục dọc (bỏ chọn để kéo 2 chiều)</div>
+        <div class="check-inline">
+          <label class="chip"><input type="checkbox" id="centerQR" checked>QR</label>
+          <label class="chip"><input type="checkbox" id="centerTitle" checked>Tiêu đề</label>
+          <label class="chip"><input type="checkbox" id="centerAccount" checked>Số TK</label>
+          <label class="chip"><input type="checkbox" id="centerAlias" checked>Alias</label>
+          <label class="chip"><input type="checkbox" id="centerFooter" checked>Footer</label>
+        </div>
+        <div class="hint" style="margin-top:6px">🔧 Mẹo: bỏ chọn mục nào thì phần đó có thể kéo tự do theo cả trục ngang & dọc.</div>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Tài khoản</div>
+        <div class="field"><label for="i_account">Số tài khoản</label><input type="text" id="i_account" value="100868576472" inputmode="numeric"></div>
+        <div class="row">
+          <div class="field"><label for="i_accountFontSize">Cỡ chữ (px)</label><input type="number" id="i_accountFontSize" min="16" max="64" value="24"></div>
+          <div class="field"><label for="i_accountColor">Màu</label><input type="color" id="i_accountColor" value="#134a7c"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Người thụ hưởng</div>
+        <div class="field"><label for="i_titleText">Tên hiển thị (1 dòng)</label><textarea id="i_titleText" rows="2">VIETINBANK NAM SÀI GÒN</textarea></div>
+        <div class="row">
+          <div class="field"><label for="i_titleSize">Cỡ chữ (px)</label><input type="number" id="i_titleSize" min="16" max="64" value="28"></div>
+          <div class="field"><label for="i_titleColor">Màu</label><input type="color" id="i_titleColor" value="#134a7c"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Alias</div>
+        <div class="field"><label for="i_alias">Alias</label><input type="text" id="i_alias" value="ThoLC"></div>
+        <div class="check-inline" style="margin:6px 0 2px">
+          <label class="chip"><input type="checkbox" id="i_aliasVisible"> Hiển thị Alias</label>
+        </div>
+        <div class="row">
+          <div class="field"><label for="i_aliasFontSize">Cỡ chữ (px)</label><input type="number" id="i_aliasFontSize" min="10" max="48" value="20"></div>
+          <div class="field"><label for="i_aliasColor">Màu</label><input type="color" id="i_aliasColor" value="#134a7c"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Ảnh nền</div>
+        <div class="row">
+          <button class="btn muted" id="pickBg" type="button">Chọn ảnh</button>
+          <button class="btn secondary" id="pickDir" type="button">Chọn thư mục “source”</button>
+        </div>
+        <input type="file" id="i_bgFile" accept="image/*" multiple hidden>
+        <input type="file" id="dirPicker" accept="image/*" webkitdirectory directory multiple hidden>
+        <details>
+          <summary id="gallerySummary">Thư viện (ấn để mở)</summary>
+          <div class="gallery" id="gallery"></div>
+        </details>
+        <div class="hint">Khi host trên GitHub Pages, ứng dụng sẽ tự nạp ảnh trong thư mục <b>source</b> bằng GitHub API. Có thể override bằng phần CONFIG bên trên.</div>
+      </div>
+
+      <details>
+        <summary>Tùy chỉnh nâng cao</summary>
+        <div class="group" style="margin-top:8px">
+          <div class="row">
+            <div class="field"><label for="i_qrSize">Kích thước QR (px)</label><input type="number" id="i_qrSize" min="180" max="520" value="300"></div>
+            <div class="field"><label for="i_qrX">Vị trí QR (theo trục X)</label><input type="number" id="i_qrX" value="0" disabled></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="i_accountLabel">Nhãn Số TK (tùy chọn)</label><input type="text" id="i_accountLabel" placeholder=""></div>
+            <div class="field"><label for="i_aliasLabel">Nhãn Alias (tùy chọn)</label><input type="text" id="i_aliasLabel" placeholder=""></div>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>Footer (ẩn/hiện & chỉnh màu)</summary>
+        <div class="group" style="margin-top:8px">
+          <div class="check-inline" style="margin-bottom:6px">
+            <label class="chip"><input type="checkbox" id="i_footerVisible" checked> Hiển thị Footer</label>
+          </div>
+          <div class="row">
+            <div class="field"><label for="i_f1">Dòng 1</label><input type="text" id="i_f1" value="VietinBank - CN Nam Sài Gòn"></div>
+            <div class="field"><label for="i_footerColor">Màu Footer</label><input type="color" id="i_footerColor" value="#355a78"></div>
+          </div>
+          <div class="field"><label for="i_f2">Dòng 2</label><input type="text" id="i_f2" value="Phòng Dịch vụ Khách Hàng"></div>
+          <div class="field"><label for="i_f3">Dòng 3</label><input type="text" id="i_f3" value="23 Nguyễn Hữu Thọ, P. Tân Hưng, TP HCM"></div>
+        </div>
+      </details>
+
+      <div class="sticky-actions">
+        <button class="btn" id="exportBtn" type="button">Tải PNG</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    const el = (id)=>document.getElementById(id);
+    const images=[]; let selectedIdx=-1; let dragTarget=null; let offsetX=0, offsetY=0; 
+    const centerStates={qrBox:true,title:true,accountLine:true,aliasLine:true,footer:true};
+
+    const cardRect=()=> el('card').getBoundingClientRect();
+    const clamp=(n,min,max)=> Math.max(min, Math.min(max, n));
+    const isImageFile=(f)=> f?.type?.startsWith?.('image/') || /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(f?.name || f);
+
+    function beginDrag(target, clientX, clientY){
+      dragTarget=target; const rect=target.getBoundingClientRect();
+      const id=target.id;
+      if(centerStates[id]){ offsetY = clientY - rect.top; offsetX = (id==='qrBox') ? clientX - rect.left : 0; }
+      else{ offsetX = clientX - rect.left; offsetY = clientY - rect.top; }
+      target.classList.add('dragging');
+    }
+    function moveDrag(clientX, clientY){
+      if(!dragTarget) return; const c=cardRect(); const id=dragTarget.id;
+      if(centerStates[id]){
+        const top = clamp(clientY - c.top - offsetY, 0, c.height - dragTarget.offsetHeight);
+        dragTarget.style.top = top + 'px';
+        if(id==='qrBox'){
+          // Keep QR horizontally centered when 'Căn giữa' is ON
+          const w = dragTarget.offsetWidth;
+          const left = (c.width - w) / 2;
+          dragTarget.style.left = left + 'px';
+          dragTarget.style.translate = '0 0';
+        }else{
+          dragTarget.style.left = '0'; dragTarget.style.right = '0'; dragTarget.style.translate = '0 0'; dragTarget.style.textAlign = 'center';
+        }
+      }else{
+        const left = clamp(clientX - c.left - offsetX, 0, c.width - dragTarget.offsetWidth);
+        const top  = clamp(clientY - c.top  - offsetY, 0, c.height - dragTarget.offsetHeight);
+        dragTarget.style.left = left + 'px'; 
+        dragTarget.style.top = top + 'px'; 
+        dragTarget.style.right = '';
+        dragTarget.style.translate='0 0';
+      }
+    }
+    function endDrag(){ if(dragTarget){ dragTarget.classList.remove('dragging'); dragTarget=null; } }
+
+    function wireDrag(id){
+      const node = el(id);
+      node.addEventListener('mousedown', (e)=>{ e.preventDefault(); beginDrag(node, e.clientX, e.clientY); });
+      document.addEventListener('mousemove', (e)=> moveDrag(e.clientX, e.clientY));
+      document.addEventListener('mouseup', endDrag);
+      node.addEventListener('touchstart', (e)=>{ const t=e.touches[0]; beginDrag(node, t.clientX, t.clientY); }, {passive:false});
+      document.addEventListener('touchmove', (e)=>{ if(!dragTarget) return; const t=e.touches[0]; moveDrag(t.clientX, t.clientY); e.preventDefault(); }, {passive:false});
+      document.addEventListener('touchend', endDrag);
+    }
+    ['qrBox','title','accountLine','aliasLine','footer'].forEach(wireDrag);
+
+    function snapToCenter(id){
+      const elem = el(id); const c = cardRect();
+      if(id==='qrBox'){
+        const w = parseInt(el('i_qrSize').value||300);
+        elem.style.left = ((c.width - w)/2) + 'px';
+        elem.style.translate = '0 0';
+      }else{
+        elem.style.left = '0'; elem.style.right = '0';
+        elem.style.textAlign = 'center'; elem.style.translate = '0 0';
+      }
+    }
+    function releaseToFree(id){
+      const elem = el(id); const c = cardRect(); const r = elem.getBoundingClientRect();
+      const left = r.left - c.left; const top = r.top - c.top;
+      elem.style.left = left + 'px'; elem.style.top = top + 'px';
+      elem.style.right = '';
+      elem.style.translate = '0 0';
+    }
+    function applyCenter(id){
+      if(centerStates[id]) snapToCenter(id);
+      else releaseToFree(id);
+    }
+    [['centerQR','qrBox'],['centerTitle','title'],['centerAccount','accountLine'],['centerAlias','aliasLine'],['centerFooter','footer']].forEach(([cid,id])=>{
+      el(cid).addEventListener('change', (e)=>{ centerStates[id]=e.target.checked; applyCenter(id); });
+    });
+
+    el('pickBg').onclick=()=> el('i_bgFile').click();
+    el('i_bgFile').onchange=(e)=>{
+      const files=[...e.target.files].filter(isImageFile);
+      addFilesToGallery(files);
+    };
+    el('pickDir').onclick=()=> el('dirPicker').click();
+    el('dirPicker').onchange=(e)=>{
+      const files=[...e.target.files].filter(isImageFile);
+      addFilesToGallery(files);
+    };
+    function addFilesToGallery(files){
+      if(!files || !files.length) return;
+      let firstAdd = images.length===0;
+      const readerQueue = files.slice();
+      (function next(){
+        const f = readerQueue.shift();
+        if(!f){ renderGallery(); if(firstAdd && images.length) selectImg(0); return; }
+        const reader = new FileReader();
+        reader.onload = (evt)=>{ images.push(evt.target.result); if(readerQueue.length%15===0) renderGallery(); next(); };
+        reader.readAsDataURL(f);
+      })();
+    }
+    function addUrlListToGallery(urls){
+      if(!urls || !urls.length) return;
+      const firstAdd = images.length===0;
+      urls.forEach(u=>{ if(isImageFile(u)) images.push(u); });
+      renderGallery();
+      if(firstAdd && images.length) selectImg(0);
+    }
+
+    async function autoLoadFromGitHub(){
+      const cfg = window.AUTO_LOAD || {};
+      const mode = cfg.mode || 'github_auto';
+      function deriveFromLocation(){
+        const host = location.hostname;
+        const path = location.pathname.replace(/^\//,'').split('/').filter(Boolean);
+        let owner = (host.endsWith('github.io')) ? host.split('.')[0] : (cfg.owner || '');
+        let repo = (host.endsWith('github.io') ? (path[0] || (owner + '.github.io')) : (cfg.repo || ''));
+        return {owner, repo};
+      }
+      if(mode==='manifest'){
+        try{
+          const r = await fetch(cfg.manifest || 'source/images.json', {cache:'no-cache'});
+          if(r.ok){
+            const arr = await r.json();
+            const urls = arr.map(x=> typeof x==='string' ? x : (x.url || x.path || '') ).filter(Boolean);
+            addUrlListToGallery(urls);
+          }
+        }catch(e){}
+        return;
+      }
+      if(mode==='github' || (mode==='github_auto' && location.hostname.endsWith('github.io'))){
+        const {owner, repo} = (mode==='github' ? {owner: cfg.owner, repo: cfg.repo} : deriveFromLocation());
+        if(!owner || !repo) return;
+        const dir = cfg.dir || 'source';
+        const refs = (cfg.branch ? [cfg.branch] : ['gh-pages','main','master']);
+        const headers = {'Accept':'application/vnd.github+json'};
+        for(const ref of refs){
+          const api = `https://api.github.com/repos/${owner}/${repo}/contents/${dir}?ref=${encodeURIComponent(ref)}`;
+          try{
+            const res = await fetch(api, {headers, cache:'no-cache'});
+            if(!res.ok) continue;
+            const arr = await res.json();
+            const urls = (arr||[]).filter(x => x.type==='file' && isImageFile(x.name)).map(x=> x.download_url);
+            if(urls.length){ addUrlListToGallery(urls); break; }
+          }catch(e){ }
+        }
+      }
+    }
+
+    function renderGallery(){ 
+      el('gallery').innerHTML = images.map((src,i)=>`<div class="g-item ${i===selectedIdx?'selected':''}" onclick="selectImg(${i})"><img src="${src}"><button class="g-del" onclick="event.stopPropagation(); delImg(${i})">×</button></div>`).join(''); 
+      const sum = el('gallerySummary'); if(sum) sum.textContent = `Thư viện (${images.length})`;
+    }
+    window.selectImg=(i)=>{ selectedIdx=i; el('bg').style.backgroundImage=`url('${images[i]}')`; renderGallery(); };
+    window.delImg=(i)=>{ images.splice(i,1); if(selectedIdx===i){ selectedIdx=images.length?0:-1; if(selectedIdx>=0) selectImg(selectedIdx); else el('bg').style.backgroundImage=''; } else if(selectedIdx>i) selectedIdx--; renderGallery(); };
+
+    function updateQR(){ const acc = el('i_account').value.replace(/\\D/g,''); if(acc) el('qr').src = `https://img.vietqr.io/image/970415-${acc}-QY3QZ1v.jpg`; }
+    function updateAll(){
+      el('titleText').textContent = (el('i_titleText').value||'').toUpperCase();
+      el('title').style.fontSize = (el('i_titleSize').value||28) + 'px';
+      el('title').style.color = el('i_titleColor').value;
+
+      const c=cardRect();
+      const qrSize = Math.min(parseInt(el('i_qrSize').value||300), Math.floor(c.width*0.92));
+      const qb = el('qrBox'); qb.style.width=qb.style.height=qrSize+'px';
+
+      const accText = el('i_account').value.replace(/\\D/g,'');
+      el('accountVal').textContent = accText;
+      el('accountVal').style.fontSize = (el('i_accountFontSize').value||24) + 'px';
+      el('accountVal').style.color = el('i_accountColor').value;
+      el('accountLabel').style.color = el('i_accountColor').value;
+      el('accountLabel').textContent = el('i_accountLabel').value || '';
+
+      el('aliasVal').textContent = el('i_alias').value;
+      el('aliasVal').style.fontSize = (el('i_aliasFontSize').value||20) + 'px';
+      el('aliasVal').style.color = el('i_aliasColor').value;
+      el('aliasLabel').style.color = el('i_aliasColor').value;
+      el('aliasLabel').textContent = el('i_aliasLabel').value || '';
+      el('aliasLine').style.display = el('i_aliasVisible').checked ? 'block' : 'none';
+
+      el('footer').style.display = el('i_footerVisible').checked ? 'block' : 'none';
+      el('f1').textContent = el('i_f1').value;
+      el('f2').textContent = el('i_f2').value;
+      el('f3').textContent = el('i_f3').value;
+      el('footer').style.color = el('i_footerColor').value;
+
+      ['qrBox','title','accountLine','aliasLine','footer'].forEach(applyCenter);
+    }
+
+    el('i_account').addEventListener('input', ()=>{ updateQR(); updateAll(); }, {passive:true});
+    ['i_titleText','i_titleSize','i_titleColor','i_qrSize',
+     'i_accountFontSize','i_accountColor','i_accountLabel',
+     'i_alias','i_aliasFontSize','i_aliasColor','i_aliasLabel',
+     'i_f1','i_f2','i_f3','i_footerColor'].forEach(id=> el(id).addEventListener('input', updateAll, {passive:true}));
+    ['i_aliasVisible','i_footerVisible'].forEach(id=> el(id).addEventListener('change', updateAll));
+
+    el('exportBtn').onclick=()=>{
+      html2canvas(el('card'), {backgroundColor:null, scale:2, useCORS:true}).then(canvas=>{
+        const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=`VietinBank_QR_${el('i_account').value.replace(/\\D/g,'')}.png`; a.click();
+      });
+    };
+
+    updateQR(); updateAll();
+    autoLoadFromGitHub();
+    window.addEventListener('resize', updateAll);
+  </script>
+</body>
+</html>
