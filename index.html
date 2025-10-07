@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>VietinBank QR</title>
+  <style>
+    :root{
+      --brand:#0b7cc2; --ink:#0a2a44; --muted:#6b7280; --panel:#ffffff;
+      --bg1:#e9f6ff; --bg2:#d4edff; --shadow:0 12px 30px rgba(0,0,0,.12);
+      --r:16px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,sans-serif; color:var(--ink);
+      background:linear-gradient(135deg,var(--bg1),var(--bg2));}
+
+    /* Layout: preview top, tools bottom (tabs) */
+    .app{height:100vh; display:grid; grid-template-rows:58% 42%; gap:8px; padding:10px; max-width:1000px; margin:0 auto;}
+    .preview{display:flex; align-items:center; justify-content:center;}
+    .card{
+      position:relative; width:min(100%, 460px); aspect-ratio:2/3;
+      border-radius:var(--r); background:#bfe8ff; box-shadow:0 22px 60px rgba(13,63,97,.18); overflow:hidden;
+      touch-action:none;
+    }
+    .bg{position:absolute; inset:0; background-size:cover; background-position:center}
+    .qr-box,.title,.account,.alias,.footer{
+      position:absolute; user-select:none; -webkit-user-select:none; cursor:grab;
+    }
+    .qr-box{left:50%; top:32%; translate:-50% -50%; width:300px; height:300px; background:#fff; padding:12px; border-radius:14px; display:flex; align-items:center; justify-content:center; box-shadow:0 12px 28px rgba(0,0,0,.15)}
+    .qr-box img{max-width:100%; max-height:100%; display:block; border-radius:6px}
+    .title{left:50%; top:68%; translate:-50% 0; text-align:center; color:#134a7c; text-transform:uppercase; font-weight:800; letter-spacing:.04em; line-height:1.15; padding:0 12px; font-size:28px; display:flex; gap:.25em; justify-content:center}
+    .title span#titleLabel{font-weight:800; text-transform:none}
+    .account{left:50%; top:77%; translate:-50% 0; text-align:center; color:#134a7c; font-weight:800; font-size:24px}
+    .alias{left:50%; top:83%; translate:-50% 0; text-align:center; color:#134a7c; font-weight:700; font-size:20px; display:none}
+    .footer{left:50%; bottom:4%; translate:-50% 0; text-align:center; color:#355a78; font-size:14px; line-height:1.35; font-weight:700}
+    .dragging{outline:2px solid var(--brand); cursor:grabbing !important; z-index:10}
+    .hoverable:hover{outline:2px dashed rgba(11,124,194,.45); outline-offset:4px}
+
+    /* Tabs */
+    .tools{min-height:0; display:flex; flex-direction:column; gap:8px}
+    .tabs{display:flex; gap:6px; overflow-x:auto; -webkit-overflow-scrolling:touch}
+    .tab{flex:0 0 auto; border:1px solid #e5e7eb; background:#fff; color:#111827; border-radius:999px; padding:8px 12px; font-size:13px; cursor:pointer}
+    .tab.active{background:var(--brand); color:#fff; border-color:var(--brand)}
+    .panel{background:var(--panel); border-radius:var(--r); box-shadow:var(--shadow); padding:10px; min-height:0; flex:1; overflow:auto}
+    .row{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+    .field{margin:8px 0}
+    .label{font-size:12px; color:var(--muted); margin-bottom:4px}
+    input[type="text"], textarea{width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:10px; font-size:14px; font-family:inherit}
+    input:focus, textarea:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px rgba(11,124,194,.12)}
+    input[type="range"]{width:100%}
+    input[type="color"]{width:100%; height:38px; border-radius:8px; border:1px solid #d1d5db}
+    .check{display:flex; align-items:center; gap:8px; font-size:13px}
+    .btn{display:inline-flex; justify-content:center; align-items:center; gap:8px; padding:12px 14px; border:0; border-radius:12px; background:var(--brand); color:#fff; font-weight:700; width:100%; cursor:pointer}
+    .btn.muted{background:#6b7280}
+    .btn.secondary{background:#0f9b7b}
+    .gallery{display:grid; grid-template-columns:repeat(5,1fr); gap:6px; max-height:160px; overflow:auto}
+    .g-item{aspect-ratio:1; border-radius:8px; overflow:hidden; border:2px solid transparent; position:relative}
+    .g-item img{width:100%; height:100%; object-fit:cover}
+    .g-item.selected{border-color:var(--brand)}
+    .g-del{position:absolute; top:4px; right:4px; width:22px; height:22px; border-radius:50%; border:0; background:rgba(220,38,38,.95); color:#fff; font-weight:800; cursor:pointer}
+
+    /* Desktop: side-by-side */
+    @media (min-width: 960px){
+      .app{grid-template-rows:unset; grid-template-columns:min(52vw,560px) 1fr; height:calc(100vh - 16px)}
+    }
+  
+/* Smart Control Bar for mobile editing */
+.smartbar{
+  position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom,0) + 12px);
+  background: rgba(255,255,255,.96);
+  border:1px solid rgba(11,124,194,.18);
+  box-shadow: 0 14px 28px rgba(10,42,68,.18);
+  border-radius: 16px;
+  padding: 10px;
+  display: none;
+  z-index: 10000;
+  backdrop-filter: blur(8px);
+}
+.smartbar header{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px}
+.smartbar .title{font-weight:700; font-size:14px; color:var(--ink); text-shadow:none}
+.smartbar .controls{display:grid; grid-template-columns: repeat(4, 44px) 1fr; gap:8px; align-items:center}
+.smart-btn{
+  height:44px; width:44px; border-radius:12px; border:1px solid rgba(11,124,194,.18);
+  background:linear-gradient(180deg, #ffffff, #f6fbff);
+  box-shadow:0 6px 14px rgba(10,42,68,.08);
+  font-size:18px; display:flex; align-items:center; justify-content:center; cursor:pointer
+}
+.smart-btn:active{transform:translateY(1px)}
+.smart-range{width:100%}
+.smart-tog{display:flex; align-items:center; gap:6px; font-size:13px; justify-content:flex-end}
+.smart-close{margin-left:auto; background:linear-gradient(180deg, #ff8080, #e64040); color:#fff}
+.selected{outline:2px solid var(--brand); outline-offset:4px}
+@media (max-width: 768px){ .fab{bottom:80px} } /* keep FAB above smartbar */
+
+</style>
+</head>
+<body>
+  <div class="app">
+    <!-- PREVIEW -->
+    <section class="preview">
+      <div class="card hoverable" id="card">
+        <div class="bg" id="bg"></div>
+        <div class="qr-box hoverable" id="qrBox"><img id="qr" src="" alt="QR" crossorigin="anonymous" /></div>
+        <div class="title hoverable" id="title"><span id="titleLabel"></span><div id="titleText">VIETINBANK CN LÀO CAI</div></div>
+        <div class="account hoverable" id="accountLine"><span id="accountLabel"></span><span id="accountVal">108888884567</span></div>
+        <div class="alias hoverable" id="aliasLine"><span id="aliasLabel"></span><span id="aliasVal">BINHTK</span></div>
+        <div class="footer hoverable" id="footer">
+          <div id="f1">VietinBank - CN Lào Cai</div>
+          <div id="f2">Phòng Dịch vụ Khách Hàng</div>
+          <div id="f3">Đại lộ Trần Hưng Đạo, Phường Cam Đường, Tỉnh Lào Cai</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TOOLS (5 tabs) -->
+    <section class="tools">
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-t="info">Thông tin</button>
+        <button class="tab" data-t="typo">Kiểu chữ</button>
+        <button class="tab" data-t="qrbg">QR & Ảnh nền</button>
+        <button class="tab" data-t="footer">Footer</button>
+        <button class="tab" data-t="export">Xuất file</button>
+      </div>
+
+      <div class="panel">
+        <!-- TAB 1: THÔNG TIN -->
+        <div class="panel-body" data-p="info">
+          <div class="row">
+            <div class="field">
+              <div class="label">Tiền tố — Tên người thụ hưởng</div>
+              <input type="text" id="titleLabelInput" value="Tên chủ TK">
+            </div>
+            <div class="field">
+              <div class="label">Tên người thụ hưởng</div>
+              <input type="text" id="titleInput" placeholder="Tên người thụ hưởng">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <div class="label">Tiền tố — Số tài khoản</div>
+              <input type="text" id="accLabelInput" value="Số TK">
+            </div>
+            <div class="field">
+              <div class="label">Số tài khoản</div>
+              <input type="text" id="accInput" placeholder="Số tài khoản" inputmode="numeric">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <div class="label">Tiền tố — Alias</div>
+              <input type="text" id="aliasLabelInput" value="Alias">
+            </div>
+            <div class="field">
+              <div class="label">Alias</div>
+              <input type="text" id="aliasInput" placeholder="Alias">
+            </div>
+          </div>
+
+          <div class="row">
+            <label class="check"><input type="checkbox" id="aliasVisible"> Hiển thị Alias</label>
+            <label class="check"><input type="checkbox" id="accVisible" checked> Hiển thị Số tài khoản</label>
+          </div>
+        </div>
+
+        <!-- TAB 2: KIỂU CHỮ -->
+        <div class="panel-body" data-p="typo" hidden>
+          <div class="row">
+            <div class="field">
+              <div class="label">Cỡ chữ — Người thụ hưởng</div>
+              <input type="range" id="titleSize" min="16" max="64" value="28">
+            </div>
+            <div class="field">
+              <div class="label">Màu — Người thụ hưởng</div>
+              <input type="color" id="titleColor" value="#134a7c">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <div class="label">Cỡ chữ — Số tài khoản</div>
+              <input type="range" id="accSize" min="16" max="64" value="24">
+            </div>
+            <div class="field">
+              <div class="label">Màu — Số tài khoản</div>
+              <input type="color" id="accColor" value="#134a7c">
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="field">
+              <div class="label">Cỡ chữ — Alias</div>
+              <input type="range" id="aliasSize" min="10" max="48" value="20">
+            </div>
+            <div class="field">
+              <div class="label">Màu — Alias</div>
+              <input type="color" id="aliasColor" value="#134a7c">
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:6px"><div class="label">Căn giữa</div></div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="centerTitle" checked> Căn giữa Người thụ hưởng</label>
+            <label class="check"><input type="checkbox" id="centerAcc" checked> Căn giữa Số TK</label>
+          </div>
+          <div class="row">
+            <label class="check"><input type="checkbox" id="centerAlias" checked> Căn giữa Alias</label>
+          </div>
+        </div>
+
+        <!-- TAB 3: QR & ẢNH NỀN -->
+        <div class="panel-body" data-p="qrbg" hidden>
+          <div class="field">
+            <div class="label">Kích thước QR</div>
+            <input type="range" id="qrSize" min="180" max="520" value="300">
+          </div>
+          <div class="field check"><input type="checkbox" id="centerQR" checked><label for="centerQR">Căn giữa QR theo trục ngang</label></div>
+
+          <div class="row" style="margin-top:6px">
+            <button class="btn muted" id="pickBg" type="button">Chọn ảnh</button>
+            <button class="btn secondary" id="pickDir" type="button">Chọn thư mục</button>
+          </div>
+          <input type="file" id="bgFile" accept="image/*" multiple hidden>
+          <input type="file" id="dirPicker" accept="image/*" webkitdirectory directory multiple hidden>
+          <details style="margin-top:8px">
+            <summary id="gallerySummary">Thư viện (ấn để mở)</summary>
+            <div class="gallery" id="gallery"></div>
+          </details>
+        </div>
+
+        <!-- TAB 4: FOOTER -->
+        <div class="panel-body" data-p="footer" hidden>
+          <div class="field check"><input type="checkbox" id="footerVisible" checked><label for="footerVisible">Hiển thị Footer</label></div>
+          <div class="field"><div class="label">Dòng 1</div><input type="text" id="f1Input" value="VietinBank - CN Lào Cai"></div>
+          <div class="field"><div class="label">Dòng 2</div><input type="text" id="f2Input" value="Phòng Dịch vụ Khách Hàng"></div>
+          <div class="field"><div class="label">Dòng 3</div><input type="text" id="f3Input" value="Đại lộ Trần Hưng Đạo, Phường Cam Đường, Tỉnh Lào Cai"></div>
+
+          <div class="row">
+            <div class="field">
+              <div class="label">Cỡ chữ — Footer</div>
+              <input type="range" id="footerSize" min="10" max="28" value="14">
+            </div>
+            <div class="field">
+              <div class="label">Màu — Footer</div>
+              <input type="color" id="footerColor" value="#355a78">
+            </div>
+          </div>
+
+          <div class="field check" style="margin-top:6px"><input type="checkbox" id="centerFooter" checked><label for="centerFooter">Căn giữa Footer</label></div>
+
+          <div class="row" style="margin-top:8px">
+            <button class="btn secondary" id="footerSave" type="button">💾 Lưu footer</button>
+            <button class="btn muted" id="footerLoad" type="button">↩️ Khôi phục footer đã lưu</button>
+          </div>
+          <div class="field"><button class="btn muted" id="footerReset" type="button">🧹 Mặc định</button></div>
+        </div>
+
+        <!-- TAB 5: XUẤT FILE -->
+        <div class="panel-body" data-p="export" hidden>
+          <button class="btn" id="exportBtn" type="button">Tải PNG</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- libs -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
+/* --- Smart Control Bar Logic --- */
+let selectedId = null;
+const smartbar = document.getElementById('smartbar');
+const smartTitle = document.getElementById('smartTitle');
+const smartSize = document.getElementById('smartSize');
+const smartCenter = document.getElementById('smartCenter');
+const smartClose = document.getElementById('smartClose');
+const nudgeUp = document.getElementById('nudgeUp');
+const nudgeDown = document.getElementById('nudgeDown');
+const nudgeLeft = document.getElementById('nudgeLeft');
+const nudgeRight = document.getElementById('nudgeRight');
+
+const NAME_MAP = {
+  'qrBox':'QR Code',
+  'title':'Tên người thụ hưởng',
+  'accountLine':'Số tài khoản',
+  'aliasLine':'Alias',
+  'footer':'Footer'
+};
+function setSelected(id){
+  ['qrBox','title','accountLine','aliasLine','footer'].forEach(k=> $(k).classList.remove('selected'));
+  selectedId = id;
+  if(!id){ smartbar.style.display='none'; return; }
+  const el = $(id);
+  el.classList.add('selected');
+  smartTitle.textContent = `Chỉnh: ${NAME_MAP[id] || id}`;
+  smartCenter.checked = !!center[id];
+  if(id==='qrBox'){
+    smartSize.min = 120; smartSize.max = 560; smartSize.value = parseInt(qrSize.value||300);
+  }else if(id==='title'){
+    smartSize.min = 12; smartSize.max = 72; smartSize.value = parseInt(titleSize.value||28);
+  }else if(id==='accountLine'){
+    smartSize.min = 12; smartSize.max = 72; smartSize.value = parseInt(accSize.value||24);
+  }else if(id==='aliasLine'){
+    smartSize.min = 10; smartSize.max = 60; smartSize.value = parseInt(aliasSize.value||20);
+  }else if(id==='footer'){
+    smartSize.min = 10; smartSize.max = 28; smartSize.value = parseInt(footerSize.value||14);
+  }
+  smartbar.style.display='block';
+}
+['qrBox','title','accountLine','aliasLine','footer'].forEach(id=>{
+  $(id).addEventListener('click', (e)=>{ e.stopPropagation(); setSelected(id); });
+});
+document.body.addEventListener('click', (e)=>{
+  if(!e.target.closest('.smartbar') && !e.target.closest('.panel') && !e.target.closest('.tabs')){
+    setSelected(null);
+  }
+});
+smartClose.addEventListener('click', ()=> setSelected(null));
+
+smartSize.addEventListener('input', ()=>{
+  if(!selectedId) return;
+  if(selectedId==='qrBox'){
+    qrSize.value = smartSize.value;
+  }else if(selectedId==='title'){
+    titleSize.value = smartSize.value;
+  }else if(selectedId==='accountLine'){
+    accSize.value = smartSize.value;
+  }else if(selectedId==='aliasLine'){
+    aliasSize.value = smartSize.value;
+  }else if(selectedId==='footer'){
+    footerSize.value = smartSize.value;
+  }
+  updateAll();
+});
+
+smartCenter.addEventListener('change', ()=>{
+  if(!selectedId) return;
+  center[selectedId] = smartCenter.checked;
+  if(selectedId==='qrBox') $('centerQR').checked = smartCenter.checked;
+  if(selectedId==='title') $('centerTitle').checked = smartCenter.checked;
+  if(selectedId==='accountLine') $('centerAcc').checked = smartCenter.checked;
+  if(selectedId==='aliasLine') $('centerAlias').checked = smartCenter.checked;
+  if(selectedId==='footer') $('centerFooter').checked = smartCenter.checked;
+  applyCenter(selectedId);
+});
+
+let nudgeTimer = null;
+function nudge(id, dx, dy){
+  const el = $(id); if(!el) return;
+  const c = rectCard();
+  let left = el.style.left ? parseFloat(el.style.left) : (el.getBoundingClientRect().left - c.left);
+  let top  = el.style.top  ? parseFloat(el.style.top)  : (el.getBoundingClientRect().top  - c.top);
+  if(center[id]){
+    if(dx !== 0){ /* ignore horizontal when centered */ }
+    top = clamp(top + dy, 0, c.height - el.offsetHeight);
+    el.style.top = top + 'px';
+  }else{
+    left = clamp(left + dx, 0, c.width - el.offsetWidth);
+    top  = clamp(top + dy, 0, c.height - el.offsetHeight);
+    el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.right='';
+  }
+}
+function hold(btn, fn){
+  const run = ()=> fn();
+  btn.addEventListener('mousedown', ()=>{ run(); nudgeTimer=setInterval(run, 120); });
+  document.addEventListener('mouseup', ()=>{ if(nudgeTimer){ clearInterval(nudgeTimer); nudgeTimer=null; } });
+  btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); run(); nudgeTimer=setInterval(run, 120); }, {passive:false});
+  document.addEventListener('touchend', ()=>{ if(nudgeTimer){ clearInterval(nudgeTimer); nudgeTimer=null; } });
+}
+const step = 4;
+hold(nudgeUp,   ()=> selectedId && nudge(selectedId, 0, -step));
+hold(nudgeDown, ()=> selectedId && nudge(selectedId, 0,  step));
+hold(nudgeLeft, ()=> selectedId && nudge(selectedId, -step, 0));
+hold(nudgeRight,()=> selectedId && nudge(selectedId,  step, 0));
+
+</script>
+
+  <script>
+    const $ = (id)=>document.getElementById(id);
+    const card = $('card');
+    const qrBox = $('qrBox'); const qrImg = $('qr');
+    const title = $('title'); const titleText = $('titleText'); const titleLabel = $('titleLabel');
+    const accLine = $('accountLine'); const accLabel = $('accountLabel'); const accVal = $('accountVal');
+    const aliasLine = $('aliasLine'); const aliasLabel = $('aliasLabel'); const aliasVal = $('aliasVal');
+    const footer = $('footer'); const f1 = $('f1'); const f2 = $('f2'); const f3 = $('f3');
+    const bg = $('bg');
+    const images=[]; let selectedIdx=-1;
+
+    /* Tabs */
+    const tabs = $('tabs');
+    const panels = [...document.querySelectorAll('[data-p]')];
+    tabs.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.tab'); if(!btn) return;
+      const t = btn.dataset.t;
+      tabs.querySelectorAll('.tab').forEach(b=> b.classList.toggle('active', b.dataset.t===t));
+      panels.forEach(p => p.hidden = (p.dataset.p !== t));
+    });
+
+    /* Drag + center */
+    const center = {qrBox:true, title:true, accountLine:true, aliasLine:true, footer:true};
+    let dragTarget=null, offsetX=0, offsetY=0;
+    const rectCard = ()=> card.getBoundingClientRect();
+    const clamp=(n,min,max)=> Math.max(min, Math.min(max, n));
+
+    function beginDrag(target, x, y){
+      dragTarget=target; const r = target.getBoundingClientRect();
+      const id = target.id;
+      if(center[id]){ offsetY = y - r.top; offsetX = (id==='qrBox') ? x - r.left : 0; }
+      else { offsetX = x - r.left; offsetY = y - r.top; }
+      target.classList.add('dragging');
+    }
+    function moveDrag(x,y){
+      if(!dragTarget) return;
+      const c = rectCard(); const id = dragTarget.id;
+      if(center[id]){
+        const top = clamp(y - c.top - offsetY, 0, c.height - dragTarget.offsetHeight);
+        dragTarget.style.top = top + 'px';
+        if(id==='qrBox'){
+          const w = dragTarget.offsetWidth;
+          const left = (c.width - w) / 2;
+          dragTarget.style.left = left + 'px';
+          dragTarget.style.translate = '0 0';
+        }else{
+          dragTarget.style.left='0'; dragTarget.style.right='0'; dragTarget.style.textAlign='center'; dragTarget.style.translate='0 0';
+        }
+      }else{
+        const left = clamp(x - c.left - offsetX, 0, c.width - dragTarget.offsetWidth);
+        const top  = clamp(y - c.top  - offsetY, 0, c.height - dragTarget.offsetHeight);
+        dragTarget.style.left = left + 'px'; dragTarget.style.top = top + 'px'; dragTarget.style.right=''; dragTarget.style.translate='0 0';
+      }
+    }
+    function endDrag(){ if(dragTarget){ dragTarget.classList.remove('dragging'); dragTarget=null; } }
+    function wireDrag(id){
+      const node=$(id);
+      node.addEventListener('mousedown', (e)=>{ e.preventDefault(); beginDrag(node, e.clientX, e.clientY); });
+      document.addEventListener('mousemove', (e)=> moveDrag(e.clientX, e.clientY));
+      document.addEventListener('mouseup', endDrag);
+      node.addEventListener('touchstart', (e)=>{ const t=e.touches[0]; beginDrag(node, t.clientX, t.clientY); }, {passive:false});
+      document.addEventListener('touchmove', (e)=>{ if(!dragTarget) return; const t=e.touches[0]; moveDrag(t.clientX, t.clientY); e.preventDefault(); }, {passive:false});
+      document.addEventListener('touchend', endDrag);
+    }
+    ['qrBox','title','accountLine','aliasLine','footer'].forEach(wireDrag);
+
+    function applyCenter(id){
+      const el=$(id); const c = rectCard();
+      if(center[id]){
+        if(id==='qrBox'){
+          const w = el.offsetWidth; el.style.left = ((c.width - w)/2) + 'px'; el.style.translate='0 0';
+        }else{
+          el.style.left='0'; el.style.right='0'; el.style.textAlign='center'; el.style.translate='0 0';
+        }
+      }else{
+        // keep current absolute position
+      }
+    }
+
+    /* Inputs */
+    // Tab1
+    const titleLabelInput=$('titleLabelInput'), titleInput=$('titleInput');
+    const accLabelInput=$('accLabelInput'), accInput=$('accInput'), accVisible=$('accVisible');
+    const aliasLabelInput=$('aliasLabelInput'), aliasInput=$('aliasInput'), aliasVisible=$('aliasVisible');
+    // Tab2
+    const titleSize=$('titleSize'), titleColor=$('titleColor');
+    const accSize=$('accSize'), accColor=$('accColor');
+    const aliasSize=$('aliasSize'), aliasColor=$('aliasColor');
+    const centerTitle=$('centerTitle'), centerAcc=$('centerAcc'), centerAlias=$('centerAlias');
+    // Tab3
+    const qrSize=$('qrSize'), centerQR=$('centerQR');
+    // Tab4
+    const footerVisible=$('footerVisible'), f1Input=$('f1Input'), f2Input=$('f2Input'), f3Input=$('f3Input'), footerSize=$('footerSize'), footerColor=$('footerColor');
+    const centerFooter=$('centerFooter');
+    const FOOTER_KEY='vtb_qr_footer_v1';
+
+    function updateQR(){
+      const acc = (accInput.value||'').replace(/\\D/g,'');
+      if(acc){ qrImg.src = `https://img.vietqr.io/image/970415-${acc}-QY3QZ1v.jpg`; }
+    }
+    function updateAll(){
+      // QR size
+      const c = rectCard();
+      const size = Math.min(parseInt(qrSize.value||300), Math.floor(c.width*0.92));
+      qrBox.style.width = qrBox.style.height = size+'px';
+
+      // Title + prefix
+      const tt = (titleInput.value||'').toUpperCase();
+      titleText.textContent = tt;
+      title.style.fontSize = (titleSize.value||28)+'px';
+      title.style.color = titleColor.value||'#134a7c';
+      const tl = (titleLabelInput.value||'').trim();
+      titleLabel.textContent = tl ? (tl + ':') : '';
+      titleLabel.style.color = titleColor.value||'#134a7c';
+
+      // Account + prefix
+      accLine.style.display = accVisible.checked ? 'block' : 'none';
+      accVal.textContent = (accInput.value||'').replace(/\\D/g,'');
+      accVal.style.fontSize = (accSize.value||24)+'px';
+      accLabel.style.fontSize = (accSize.value||24)+'px';
+      accVal.style.color = accColor.value||'#134a7c';
+      const al = (accLabelInput.value||'').trim();
+      accLabel.textContent = accVisible.checked && al ? (al + ': ') : '';
+      accLabel.style.color = accColor.value||'#134a7c';
+
+      // Alias + prefix
+      aliasLine.style.display = aliasVisible.checked ? 'block' : 'none';
+      aliasVal.textContent = aliasInput.value||'';
+      aliasVal.style.fontSize = (aliasSize.value||20)+'px';
+      aliasLabel.style.fontSize = (aliasSize.value||20)+'px';
+      aliasVal.style.color = aliasColor.value||'#134a7c';
+      const ail = (aliasLabelInput.value||'').trim();
+      aliasLabel.textContent = aliasVisible.checked && ail ? (ail + ': ') : '';
+      aliasLabel.style.color = aliasColor.value||'#134a7c';
+
+      // Footer
+      footer.style.display = footerVisible.checked ? 'block' : 'none';
+      [f1,f2,f3].forEach(el=> el.style.fontSize = (footerSize.value||14)+'px');
+      f1.textContent = f1Input.value||'';
+      f2.textContent = f2Input.value||'';
+      f3.textContent = f3Input.value||'';
+      footer.style.color = footerColor.value||'#355a78';
+
+      // Center toggles
+      applyCenter('qrBox'); applyCenter('title'); applyCenter('accountLine'); applyCenter('aliasLine'); applyCenter('footer');
+    }
+
+    [titleLabelInput,titleInput,
+     accLabelInput,accInput,accVisible,
+     aliasLabelInput,aliasInput,aliasVisible,
+     titleSize,titleColor,accSize,accColor,aliasSize,aliasColor,
+     footerVisible,f1Input,f2Input,f3Input,footerSize,footerColor,
+     qrSize
+    ].forEach(n=> n.addEventListener('input', ()=>{ if(n===accInput) updateQR(); updateAll(); }));
+
+    [centerQR,centerTitle,centerAcc,centerAlias,centerFooter].forEach(n=> n.addEventListener('change', ()=>{
+      const map = {centerQR:'qrBox', centerTitle:'title', centerAcc:'accountLine', centerAlias:'aliasLine', centerFooter:'footer'};
+      center[map[n.id]] = n.checked; applyCenter(map[n.id]);
+    }));
+
+    /* Export */
+    $('exportBtn').addEventListener('click', ()=>{
+      html2canvas(card, {backgroundColor:null, scale:2, useCORS:true}).then(canvas=>{
+        const a=document.createElement('a'); a.href=canvas.toDataURL('image/png');
+        const acc=(accInput.value||'').replace(/\\D/g,'') || 'VietinBank';
+        a.download=`VietinBank_QR_${acc}.png`; a.click();
+      });
+    });
+
+    /* Background gallery */
+    function renderGallery(){ 
+      $('gallery').innerHTML = images.map((src,i)=>`<div class="g-item ${i===selectedIdx?'selected':''}" onclick="selectImg(${i})"><img src="${src}"><button class="g-del" onclick="event.stopPropagation(); delImg(${i})">×</button></div>`).join(''); 
+      const sum = $('gallerySummary'); if(sum) sum.textContent = `Thư viện (${images.length})`;
+    }
+    window.selectImg=(i)=>{ selectedIdx=i; bg.style.backgroundImage=`url('${images[i]}')`; renderGallery(); };
+    window.delImg=(i)=>{ images.splice(i,1); if(selectedIdx===i){ selectedIdx=images.length?0:-1; if(selectedIdx>=0) selectImg(selectedIdx); else bg.style.backgroundImage=''; } else if(selectedIdx>i) selectedIdx--; renderGallery(); };
+
+    function addFilesToGallery(files){
+      if(!files || !files.length) return;
+      let firstAdd = images.length===0;
+      for(const f of files){ if(f?.type?.startsWith('image/')){
+        const r = new FileReader(); r.onload = e=>{ images.push(e.target.result); renderGallery(); if(firstAdd){ selectImg(0); firstAdd=false; } };
+        r.readAsDataURL(f);
+      }}
+    }
+    $('pickBg').onclick = ()=> $('bgFile').click();
+    $('pickDir').onclick = ()=> $('dirPicker').click();
+    $('bgFile').onchange = (e)=> addFilesToGallery([...e.target.files]);
+    $('dirPicker').onchange = (e)=> addFilesToGallery([...e.target.files]);
+
+    /* Footer save/load to localStorage */
+    function collectFooter(){
+      return {
+        visible: footerVisible.checked,
+        f1: f1Input.value, f2: f2Input.value, f3: f3Input.value,
+        size: footerSize.value, color: footerColor.value,
+        center: center.footer
+      };
+    }
+    function applyFooter(p){
+      if(!p) return;
+      footerVisible.checked = !!p.visible;
+      f1Input.value = p.f1 || '';
+      f2Input.value = p.f2 || '';
+      f3Input.value = p.f3 || '';
+      footerSize.value = p.size || 14;
+      footerColor.value = p.color || '#355a78';
+      center.footer = !!p.center;
+      $('centerFooter').checked = center.footer;
+      updateAll();
+    }
+    $('footerSave').addEventListener('click', ()=>{
+      try{ localStorage.setItem(FOOTER_KEY, JSON.stringify(collectFooter())); alert('Đã lưu footer vào trình duyệt ✅'); }catch(e){ alert('Không thể lưu (localStorage bị chặn).'); }
+    });
+    $('footerLoad').addEventListener('click', ()=>{
+      try{ const raw=localStorage.getItem(FOOTER_KEY); if(!raw) return alert('Chưa có footer đã lưu.'); applyFooter(JSON.parse(raw)); }catch(e){ alert('Không thể đọc footer đã lưu.'); }
+    });
+    $('footerReset').addEventListener('click', ()=>{
+      localStorage.removeItem(FOOTER_KEY);
+      // Reset to defaults
+      footerVisible.checked = true;
+      f1Input.value = 'VietinBank - CN Lào Cai';
+      f2Input.value = 'Phòng Dịch vụ Khách Hàng';
+      f3Input.value = 'Đại lộ Trần Hưng Đạo, Phường Cam Đường, Tỉnh Lào Cai';
+      footerSize.value = 14;
+      footerColor.value = '#355a78';
+      center.footer = true; $('centerFooter').checked = true;
+      updateAll();
+    });
+
+    /* Init */
+    updateQR(); updateAll();
+  
+/* --- Smart Control Bar Logic --- */
+let selectedId = null;
+const smartbar = document.getElementById('smartbar');
+const smartTitle = document.getElementById('smartTitle');
+const smartSize = document.getElementById('smartSize');
+const smartCenter = document.getElementById('smartCenter');
+const smartClose = document.getElementById('smartClose');
+const nudgeUp = document.getElementById('nudgeUp');
+const nudgeDown = document.getElementById('nudgeDown');
+const nudgeLeft = document.getElementById('nudgeLeft');
+const nudgeRight = document.getElementById('nudgeRight');
+
+const NAME_MAP = {
+  'qrBox':'QR Code',
+  'title':'Tên người thụ hưởng',
+  'accountLine':'Số tài khoản',
+  'aliasLine':'Alias',
+  'footer':'Footer'
+};
+function setSelected(id){
+  ['qrBox','title','accountLine','aliasLine','footer'].forEach(k=> $(k).classList.remove('selected'));
+  selectedId = id;
+  if(!id){ smartbar.style.display='none'; return; }
+  const el = $(id);
+  el.classList.add('selected');
+  smartTitle.textContent = `Chỉnh: ${NAME_MAP[id] || id}`;
+  smartCenter.checked = !!center[id];
+  if(id==='qrBox'){
+    smartSize.min = 120; smartSize.max = 560; smartSize.value = parseInt(qrSize.value||300);
+  }else if(id==='title'){
+    smartSize.min = 12; smartSize.max = 72; smartSize.value = parseInt(titleSize.value||28);
+  }else if(id==='accountLine'){
+    smartSize.min = 12; smartSize.max = 72; smartSize.value = parseInt(accSize.value||24);
+  }else if(id==='aliasLine'){
+    smartSize.min = 10; smartSize.max = 60; smartSize.value = parseInt(aliasSize.value||20);
+  }else if(id==='footer'){
+    smartSize.min = 10; smartSize.max = 28; smartSize.value = parseInt(footerSize.value||14);
+  }
+  smartbar.style.display='block';
+}
+['qrBox','title','accountLine','aliasLine','footer'].forEach(id=>{
+  $(id).addEventListener('click', (e)=>{ e.stopPropagation(); setSelected(id); });
+});
+document.body.addEventListener('click', (e)=>{
+  if(!e.target.closest('.smartbar') && !e.target.closest('.panel') && !e.target.closest('.tabs')){
+    setSelected(null);
+  }
+});
+smartClose.addEventListener('click', ()=> setSelected(null));
+
+smartSize.addEventListener('input', ()=>{
+  if(!selectedId) return;
+  if(selectedId==='qrBox'){
+    qrSize.value = smartSize.value;
+  }else if(selectedId==='title'){
+    titleSize.value = smartSize.value;
+  }else if(selectedId==='accountLine'){
+    accSize.value = smartSize.value;
+  }else if(selectedId==='aliasLine'){
+    aliasSize.value = smartSize.value;
+  }else if(selectedId==='footer'){
+    footerSize.value = smartSize.value;
+  }
+  updateAll();
+});
+
+smartCenter.addEventListener('change', ()=>{
+  if(!selectedId) return;
+  center[selectedId] = smartCenter.checked;
+  if(selectedId==='qrBox') $('centerQR').checked = smartCenter.checked;
+  if(selectedId==='title') $('centerTitle').checked = smartCenter.checked;
+  if(selectedId==='accountLine') $('centerAcc').checked = smartCenter.checked;
+  if(selectedId==='aliasLine') $('centerAlias').checked = smartCenter.checked;
+  if(selectedId==='footer') $('centerFooter').checked = smartCenter.checked;
+  applyCenter(selectedId);
+});
+
+let nudgeTimer = null;
+function nudge(id, dx, dy){
+  const el = $(id); if(!el) return;
+  const c = rectCard();
+  let left = el.style.left ? parseFloat(el.style.left) : (el.getBoundingClientRect().left - c.left);
+  let top  = el.style.top  ? parseFloat(el.style.top)  : (el.getBoundingClientRect().top  - c.top);
+  if(center[id]){
+    if(dx !== 0){ /* ignore horizontal when centered */ }
+    top = clamp(top + dy, 0, c.height - el.offsetHeight);
+    el.style.top = top + 'px';
+  }else{
+    left = clamp(left + dx, 0, c.width - el.offsetWidth);
+    top  = clamp(top + dy, 0, c.height - el.offsetHeight);
+    el.style.left = left + 'px'; el.style.top = top + 'px'; el.style.right='';
+  }
+}
+function hold(btn, fn){
+  const run = ()=> fn();
+  btn.addEventListener('mousedown', ()=>{ run(); nudgeTimer=setInterval(run, 120); });
+  document.addEventListener('mouseup', ()=>{ if(nudgeTimer){ clearInterval(nudgeTimer); nudgeTimer=null; } });
+  btn.addEventListener('touchstart', (e)=>{ e.preventDefault(); run(); nudgeTimer=setInterval(run, 120); }, {passive:false});
+  document.addEventListener('touchend', ()=>{ if(nudgeTimer){ clearInterval(nudgeTimer); nudgeTimer=null; } });
+}
+const step = 4;
+hold(nudgeUp,   ()=> selectedId && nudge(selectedId, 0, -step));
+hold(nudgeDown, ()=> selectedId && nudge(selectedId, 0,  step));
+hold(nudgeLeft, ()=> selectedId && nudge(selectedId, -step, 0));
+hold(nudgeRight,()=> selectedId && nudge(selectedId,  step, 0));
+
+</script>
+
+  <div class="smartbar" id="smartbar">
+    <header>
+      <div id="smartTitle" class="title">Chỉnh sửa</div>
+      <label class="smart-tog"><input type="checkbox" id="smartCenter"> Căn giữa ngang</label>
+      <button class="smart-btn smart-close" id="smartClose">✕</button>
+    </header>
+    <div class="controls">
+      <button class="smart-btn" id="nudgeUp">↑</button>
+      <button class="smart-btn" id="nudgeLeft">←</button>
+      <button class="smart-btn" id="nudgeRight">→</button>
+      <button class="smart-btn" id="nudgeDown">↓</button>
+      <input type="range" id="smartSize" class="smart-range" min="10" max="520" value="24">
+    </div>
+  </div>
+
+</body>
+</html>
